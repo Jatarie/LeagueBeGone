@@ -40,23 +40,25 @@ def usherAPIRequest(token, sig, vodID, length_of_vid):
 
 
 def fileHandler(vodID, dir_path):
+    voddir = os.path.pardir + "\\vods\\"
+    print(voddir)
     try:
-        os.mkdir("vods")
+        os.mkdir(voddir)
     except FileExistsError:
         pass
     try:
-        os.mkdir("images")
+        os.mkdir(os.path.pardir + "\\images\\")
     except FileExistsError:
         pass
-    file_list = os.listdir("vods")
+    file_list = os.listdir(voddir)
     for file in file_list:
-        os.remove("vods\\" + file)
+        os.remove(voddir + file)
     file_list = os.listdir(dir_path)
     for file in file_list:
         if ".jpg" in file:
             os.remove(file)
 
-    filepath = "vods\\" + str(vodID) + ".mp4"
+    filepath = voddir + str(vodID) + ".mp4"
     try:
         os.remove(filepath)
     except FileNotFoundError:
@@ -150,15 +152,16 @@ def windowFocus(hwnd, lParam):
 
 
 def analyseFirstFrameOfVideoChunk(r, frame_number):
+    imagedir = os.path.pardir + "\\images\\"
     with open("chunk.mp4", "wb") as f:
         for chunk in r.iter_content(chunk_size=255):
             if chunk:
                 f.write(chunk)
     cap = VideoCapture("chunk.mp4")
     ret, frame = cap.read()
-    imwrite("images\\frame{}.jpg".format(frame_number), frame)
-    img = imread("frame{}.jpg".format(frame_number))
-    os.remove("images\\frame{}.jpg".format(frame_number))
+    imwrite("{}frame{}.jpg".format(imagedir, frame_number), frame)
+    img = imread("{}frame{}.jpg".format(imagedir, frame_number))
+    os.remove("{}frame{}.jpg".format(imagedir, frame_number))
     if img is None:
         return frame_number, False
     px1 = img[1056, 1893]
