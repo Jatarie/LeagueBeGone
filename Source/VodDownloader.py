@@ -6,11 +6,13 @@ import sys
 import math
 from cv2 import VideoCapture, imwrite, imread
 import subprocess
-from Source.keyfile import client_id
+
+sys.path.append('../')
+from Source import keyfile
 
 
 def twitchAPIRequest(vodID):
-    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/{}/access_token?&client_id={}".format(vodID, client_id))
+    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/{}/access_token?&client_id={}".format(vodID, keyfile.client_id))
     jsonData = rawTwitchAPIJsonData.json()
     token = jsonData["token"]
     sig = jsonData["sig"]
@@ -171,6 +173,7 @@ def getChunkLength(start_of_link):
             if chunk:
                 f.write(chunk)
     ffprobedir = os.pardir + "\\ffmpeg\\bin\\ffprobe.exe"
+    print(ffprobedir)
     result = subprocess.Popen([ffprobedir, "chunk.mp4"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     byte_object = [x for x in result.stdout.readlines() if b"Duration" in x]
     return int(float((str(byte_object)[21:26])))
