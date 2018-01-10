@@ -9,12 +9,11 @@ import win32gui
 import win32con
 from cv2 import VideoCapture, imwrite, imread
 import subprocess
+from Source.keyfile import client_id
 
 
 def twitchAPIRequest(vodID):
-    start = time()
-    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/{}/access_token?&client_id=map2eprcvghxg8cdzdy2207giqnn64".format(vodID))
-    # print("Twitch API call successful in {:.2f} seconds".format(time()-start))
+    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/{}/access_token?&client_id={}".format(vodID, client_id))
     jsonData = rawTwitchAPIJsonData.json()
     token = jsonData["token"]
     sig = jsonData["sig"]
@@ -22,9 +21,7 @@ def twitchAPIRequest(vodID):
 
 
 def usherAPIRequest(token, sig, vodID):
-    start = time()
     rawUsherAPIData = requests.get("http://usher.twitch.tv/vod/{}?nauthsig={}&nauth={}&allow_source=true".format(vodID, sig, token))
-    # print("Usher API call successful in {:.2f} seconds".format(time()-start))
     intermediate_m3u8link = re.findall(r'(http)(.+?)(m3u8)', rawUsherAPIData.text)[0]
     m3u8link = intermediate_m3u8link[0] + intermediate_m3u8link[1] + intermediate_m3u8link[2]
     raw_m3u8link_data = requests.get(m3u8link)
@@ -32,7 +29,6 @@ def usherAPIRequest(token, sig, vodID):
         m3u8link = re.findall(r'(.+?)(?=index)', m3u8link)[0]
 
     extension_list = (re.findall(r'\n([^#]+)\n', raw_m3u8link_data.text))
-    # print("VOD length is {} seconds".format(len(extension_list)*6))
     start_of_link = re.findall(r'(.+)(chunked/)', m3u8link)
     start_of_link = start_of_link[0][0] + start_of_link[0][1]
     return extension_list, start_of_link
@@ -198,8 +194,6 @@ def timeParser(time_start, time_end):
 
     h_end, m_end, s_end = re.findall(r'[0-9]+(?=[a-zA-Z])', time_end)
     time_end = int(h_end)*3600 + int(m_end)*60 + int(s_end)
-
-    print(time_start, time_end)
 
     return time_start, time_end
 
