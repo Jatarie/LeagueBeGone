@@ -5,14 +5,16 @@ import os
 import sys
 import math
 from cv2 import VideoCapture, imwrite, imread
-import subprocess
+import grequests
+
 
 sys.path.append('../')
 from Source import keyfile
 
 
 def twitchAPIRequest(vodID):
-    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/{}/access_token?&client_id={}".format(vodID, keyfile.client_id))
+    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/"
+                                        "{}/access_token?&client_id={}".format(vodID, keyfile.client_id))
     jsonData = rawTwitchAPIJsonData.json()
     token = jsonData["token"]
     sig = jsonData["sig"]
@@ -20,17 +22,18 @@ def twitchAPIRequest(vodID):
 
 
 def usherAPIRequest(token, sig, vodID):
-    rawUsherAPIData = requests.get("http://usher.twitch.tv/vod/{}?nauthsig={}&nauth={}&allow_source=true".format(vodID, sig, token))
-    intermediate_m3u8link = re.findall(r'(http)(.+?)(m3u8)', rawUsherAPIData.text)[0]
-    m3u8link = intermediate_m3u8link[0] + intermediate_m3u8link[1] + intermediate_m3u8link[2]
-    raw_m3u8link_data = requests.get(m3u8link)
-    if "muted" in m3u8link:
-        m3u8link = re.findall(r'(.+?)(?=index)', m3u8link)[0]
-
+    rawUsherAPIData = requests.get("http://usher.twitch.tv/vod/"
+                                   "{}?nauthsig={}&nauth={}&allow_source=true".format(vodID, sig, token))
+    m3u8links = re.findall(r'(http.+?m3u8)', rawUsherAPIData.text)
+    source_m3u8link = m3u8links[0]
+    low_m3u8link = m3u8links[5]
+    raw_m3u8link_data = requests.get(source_m3u8link)
+    segment_length = int(re.findall(r'(?<=EXTINF:)[0-9]', raw_m3u8link_data.text)[0])
     extension_list = (re.findall(r'\n([^#]+)\n', raw_m3u8link_data.text))
-    start_of_link = re.findall(r'(.+)(chunked/)', m3u8link)
-    start_of_link = start_of_link[0][0] + start_of_link[0][1]
-    return extension_list, start_of_link
+
+    source_m3u8linkm_link = re.findall(r'(.+?)(?=index)', source_m3u8link)
+    low_m3u8link_link = re.findall(r'(.+?)(?=index)', low_m3u8link)
+    return extension_list, segment_length, source_m3u8linkm_link, low_m3u8link_link
 
 
 def fileHandler(vodID, dir_path):
@@ -70,13 +73,12 @@ def progressbar(numerator, denominator, time_remaining):
     remaining = 20 - progress
     progress_string = "[ "
     for _ in range(progress):
-        # progress_string += u"\u258D"
         progress_string += "="
     for _ in range(remaining):
         progress_string += "|"
-        # progress_string += u"\u2009" * 2
     progress_string += " ]"
-    progress_string = "\r{} est: {}h {}m {:.0f}s [{}/{}]".format(progress_string, hour, minute, second, numerator, denominator)
+    progress_string = "\r{} est: {}h {}m {:.0f}s [{}/{}]"\
+        .format(progress_string, hour, minute, second, numerator, denominator)
     sys.stdout.write(progress_string)
     sys.stdout.flush()
 
@@ -91,7 +93,7 @@ def timeremaining(start, extension_list, i):
     return ave_chunk_completion_time * chunks_remaining
 
 
-def downloadChunks(extension_list, start_of_link, filepath, filter_league, chunk_length):
+def downloadChunks(extension_list, source_link, filepath, filter_league, segment_length):
     print("\nStarting download...")
     start = time()
     frame_number = 0
@@ -104,7 +106,7 @@ def downloadChunks(extension_list, start_of_link, filepath, filter_league, chunk
     while len_extension_list > counter:
         time_remaining = timeremaining(start, extension_list, counter)
         progressbar(counter+1, len(extension_list), time_remaining)
-        downLink = (start_of_link + extension_list[counter])
+        downLink = (source_link[0] + extension_list[counter])
         r = requests.get(downLink)
         if filter_league:
             frame_number, league_present = analyseFirstFrameOfVideoChunk(r, frame_number)
@@ -113,9 +115,7 @@ def downloadChunks(extension_list, start_of_link, filepath, filter_league, chunk
         if league_present:
             counter += 20
             continue
-        for chunk in r.iter_content(chunk_size=255):
-            if chunk:
-                f.write(chunk)
+        saveChunk(f, r)
         if not file_open:
             os.startfile(filepath)
             file_open = True
@@ -127,21 +127,32 @@ def downloadChunks(extension_list, start_of_link, filepath, filter_league, chunk
     statinfo = os.stat(filepath)
     elapsedTime = time()-start
     mbDownloaded = statinfo.st_size / 1000000
-    print("{:.2f} MB downladed in {:.2f} seconds at a rate of {:.2f} MB/s".format(mbDownloaded, elapsedTime, (mbDownloaded / elapsedTime)))
+    print("{:.2f} MB downladed in {:.2f} seconds at a rate of {:.2f} MB/s"
+          .format(mbDownloaded, elapsedTime, (mbDownloaded / elapsedTime)))
 
 
 def getChannelVodID(Channel):
-    r = requests.get("https://api.twitch.tv/kraken/channels/{}/videos?client_id=map2eprcvghxg8cdzdy2207giqnn64&broadcast_type=archive".format(Channel))
+    r = requests.get("https://api.twitch.tv/kraken/channels/"
+                     "{}/videos?client_id=map2eprcvghxg8cdzdy2207giqnn64&broadcast_type=archive".format(Channel))
     data = r.json()
     return int(data["videos"][0]["url"][29:])
 
 
+def getFirstFrameData(file):
+    cap = VideoCapture(file)
+    ret, frame = cap.read()
+    imwrite("frame.jpg", frame)
+    img = imread("frame.jpg")
+    os.remove("frame.jpg")
+    if img is None:
+        return None
+    else:
+        return img
+
+
 def analyseFirstFrameOfVideoChunk(r, frame_number):
-    # imagedir = os.path.pardir + "\\images\\"
     with open("chunk.mp4", "wb") as f:
-        for chunk in r.iter_content(chunk_size=255):
-            if chunk:
-                f.write(chunk)
+        saveChunk(f, r)
     cap = VideoCapture("chunk.mp4")
     ret, frame = cap.read()
     imwrite("frame{}.jpg".format(frame_number), frame)
@@ -166,25 +177,12 @@ def analyseFirstFrameOfVideoChunk(r, frame_number):
     return frame_number, False
 
 
-def getChunkLength(start_of_link):
-    r = requests.get(start_of_link + "0.ts")
-    with open("chunk.mp4", "wb") as f:
-        for chunk in r.iter_content(chunk_size=255):
-            if chunk:
-                f.write(chunk)
-    ffprobedir = os.pardir + "\\ffmpeg\\bin\\ffprobe.exe"
-    print(ffprobedir)
-    result = subprocess.Popen([ffprobedir, "chunk.mp4"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    byte_object = [x for x in result.stdout.readlines() if b"Duration" in x]
-    return int(float((str(byte_object)[21:26])))
-
-
-def trimExtensionList(time_start, time_end, chunk_length, extension_list):
-    starting_index = int(int(time_start) / int(chunk_length))
+def trimExtensionList(time_start, time_end, segment_length, extension_list):
+    starting_index = int(int(time_start) / int(segment_length))
     if time_end == 0:
         ending_index = len(extension_list) - 1
     else:
-        ending_index = int(int(time_end) / int(chunk_length))
+        ending_index = int(int(time_end) / int(segment_length))
     return extension_list[starting_index:ending_index]
 
 
@@ -198,18 +196,24 @@ def timeParser(time_start, time_end):
     return time_start, time_end
 
 
+def saveChunk(f, r):
+    for chunk in r.iter_content(chunk_size=255):
+        if chunk:
+            f.write(chunk)
+
+
 def getVideoParams():
     debug = input("Debug?(y/n) ")
     if debug == "y":
-        debug_vodid = input("VodID?(y/n) ")
-        if debug_vodid == "n":
-            VodID = None
-        else:
-            VodID = 216537159
         filter_league = False
         time_start = '0h4m23s'
         time_end = '1h4m23s'
-        channel = "destiny"
+        channel = "draskyl"
+        debug_vodid = input("VodID?(y/n) ")
+        if debug_vodid == "n":
+            VodID = getChannelVodID(channel)
+        else:
+            VodID = 216956301
         return VodID, channel, filter_league, time_start, time_end
     tmp_var = input("Enter Vod ID or Twitch channel: ")
     try:
@@ -224,18 +228,29 @@ def getVideoParams():
     return VodID, channel, filter_league, time_start, time_end
 
 
+def analyseVod(segment_length, extension_list, low_link):
+    sample_every_n_seconds = 300
+    extensions_to_skip = int(sample_every_n_seconds / segment_length)
+    sample_extention_list = extension_list[::extensions_to_skip]
+    urls = [low_link[0] + sample_extention_list[i] for i in range(len(sample_extention_list))]
+    rs = (grequests.get(u) for u in urls)
+    responses = grequests.map(rs)
+    for response in responses:
+        with open("analysischunk.mp4", "wb") as f:
+            saveChunk(f, response)
+        img = getFirstFrameData("analysischunk.mp4")
+
+
 def main():
     dir_path = os.path.dirname(os.path.realpath(__file__))
     vodID, Channel, filter_league, time_start, time_end = getVideoParams()
     time_start, time_end = timeParser(time_start, time_end)
-    if not vodID:
-        vodID = getChannelVodID(Channel)
     filepath = fileHandler(vodID, dir_path)
     token, sig = twitchAPIRequest(vodID)
-    extension_list, start_of_link = usherAPIRequest(token, sig, vodID)
-    chunk_length = getChunkLength(start_of_link)
-    extension_list = trimExtensionList(time_start, time_end, chunk_length, extension_list)
-    downloadChunks(extension_list, start_of_link, filepath, filter_league, chunk_length)
+    extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID)
+    # analyseVod(segment_length, extension_list, low_link)
+    extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
+    downloadChunks(extension_list, source_link, filepath, filter_league, segment_length)
     if os.path.exists("chunk.mp4"):
         os.remove("chunk.mp4")
 
