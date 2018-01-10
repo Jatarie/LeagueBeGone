@@ -8,6 +8,7 @@ import math
 import win32gui
 import win32con
 from cv2 import VideoCapture, imwrite, imread
+import subprocess
 
 
 def twitchAPIRequest(vodID):
@@ -20,7 +21,7 @@ def twitchAPIRequest(vodID):
     return token, sig
 
 
-def usherAPIRequest(token, sig, vodID, length_of_vid):
+def usherAPIRequest(token, sig, vodID):
     start = time()
     rawUsherAPIData = requests.get("http://usher.twitch.tv/vod/{}?nauthsig={}&nauth={}&allow_source=true".format(vodID, sig, token))
     # print("Usher API call successful in {:.2f} seconds".format(time()-start))
@@ -34,29 +35,26 @@ def usherAPIRequest(token, sig, vodID, length_of_vid):
     # print("VOD length is {} seconds".format(len(extension_list)*6))
     start_of_link = re.findall(r'(.+)(chunked/)', m3u8link)
     start_of_link = start_of_link[0][0] + start_of_link[0][1]
-    if length_of_vid == 0:
-        return extension_list, start_of_link
-    return extension_list[len(extension_list)-int(length_of_vid/6):], start_of_link
+    return extension_list, start_of_link
 
 
 def fileHandler(vodID, dir_path):
     voddir = os.path.pardir + "\\vods\\"
-    print(voddir)
     try:
         os.mkdir(voddir)
     except FileExistsError:
         pass
-    try:
-        os.mkdir(os.path.pardir + "\\images\\")
-    except FileExistsError:
-        pass
+    # try:
+    #     os.mkdir(os.path.pardir + "\\images\\")
+    # except FileExistsError:
+    #     pass
     file_list = os.listdir(voddir)
     for file in file_list:
         os.remove(voddir + file)
-    file_list = os.listdir(dir_path)
-    for file in file_list:
-        if ".jpg" in file:
-            os.remove(file)
+    # file_list = os.listdir(dir_path)
+    # for file in file_list:
+    #     if ".jpg" in file:
+    #         os.remove(file)
 
     filepath = voddir + str(vodID) + ".mp4"
     try:
@@ -98,7 +96,7 @@ def timeremaining(start, extension_list, i):
     return ave_chunk_completion_time * chunks_remaining
 
 
-def downloadChunks(extension_list, start_of_link, filepath, filter_league):
+def downloadChunks(extension_list, start_of_link, filepath, filter_league, chunk_length):
     print("\nStarting download...")
     start = time()
     frame_number = 0
@@ -152,16 +150,16 @@ def windowFocus(hwnd, lParam):
 
 
 def analyseFirstFrameOfVideoChunk(r, frame_number):
-    imagedir = os.path.pardir + "\\images\\"
+    # imagedir = os.path.pardir + "\\images\\"
     with open("chunk.mp4", "wb") as f:
         for chunk in r.iter_content(chunk_size=255):
             if chunk:
                 f.write(chunk)
     cap = VideoCapture("chunk.mp4")
     ret, frame = cap.read()
-    imwrite("{}frame{}.jpg".format(imagedir, frame_number), frame)
-    img = imread("{}frame{}.jpg".format(imagedir, frame_number))
-    os.remove("{}frame{}.jpg".format(imagedir, frame_number))
+    imwrite("frame{}.jpg".format(frame_number), frame)
+    img = imread("frame{}.jpg".format( frame_number))
+    os.remove("frame{}.jpg".format(frame_number))
     if img is None:
         return frame_number, False
     px1 = img[1056, 1893]
@@ -181,24 +179,61 @@ def analyseFirstFrameOfVideoChunk(r, frame_number):
     return frame_number, False
 
 
+def getChunkLength(start_of_link):
+    r = requests.get(start_of_link + "0.ts")
+    with open("chunk.mp4", "wb") as f:
+        for chunk in r.iter_content(chunk_size=255):
+            if chunk:
+                f.write(chunk)
+    ffprobedir = os.pardir + "\\ffmpeg\\bin\\ffprobe.exe"
+    result = subprocess.Popen([ffprobedir, "chunk.mp4"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    byte_object = [x for x in result.stdout.readlines() if b"Duration" in x]
+    return int(float((str(byte_object)[21:26])))
+
+
+def trimExtensionList(time_start, time_end, chunk_length, extension_list):
+    starting_index = int(int(time_start) / int(chunk_length))
+    ending_index = int(int(time_end) / int(chunk_length))
+    return extension_list[starting_index:ending_index]
+
+
 def getVideoParams():
-    VodID = int(input("Enter VodID: "))
-    # VodID = 216537159
+    debug = input("Debug?(y/n) ")
+    if debug == "y":
+        debug_vodid = input("VodID?(y/n) ")
+        if debug_vodid == "n":
+            VodID = None
+        else:
+            VodID = 216537159
+        filter_league = False
+        time_start = 1200
+        time_end = 1260
+        channel = "destiny"
+        return VodID, channel, filter_league, time_start, time_end
+    tmp_var = input("Enter Vod ID or Twitch channel: ")
+    try:
+        VodID = int(tmp_var)
+        channel = None
+    except ValueError:
+        channel = tmp_var
+        VodID = None
     filter_league = bool(input("Filter League? Enter 'True' or 'False': "))
-    length_of_vid = 0
-    channel = "destiny"
-    return VodID, length_of_vid, channel, filter_league
+    time_start = int(input("Enter start time: "))
+    time_end = int(input("Enter end time: "))
+    return VodID, channel, filter_league, time_start, time_end
 
 
 def main():
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    vodID, length_of_vid, Channel, filter_league = getVideoParams()
+    vodID, Channel, filter_league, time_start, time_end = getVideoParams()
     if not vodID:
         vodID = getChannelVodID(Channel)
     filepath = fileHandler(vodID, dir_path)
     token, sig = twitchAPIRequest(vodID)
-    extension_list, start_of_link = usherAPIRequest(token, sig, vodID, length_of_vid)
-    downloadChunks(extension_list, start_of_link, filepath, filter_league)
+    extension_list, start_of_link = usherAPIRequest(token, sig, vodID)
+    chunk_length = getChunkLength(start_of_link)
+    extension_list = trimExtensionList(time_start, time_end, chunk_length, extension_list)
+    downloadChunks(extension_list, start_of_link, filepath, filter_league, chunk_length)
     win32gui.EnumWindows(windowFocus, None)
     if os.path.exists("chunk.mp4"):
         os.remove("chunk.mp4")
