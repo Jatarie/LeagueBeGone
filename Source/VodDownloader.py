@@ -141,14 +141,6 @@ def getChannelVodID(Channel):
     return int(data["videos"][0]["url"][29:])
 
 
-def windowFocus(hwnd, lParam):
-    if win32gui.IsWindowVisible(hwnd):
-        if "VLC" in win32gui.GetWindowText(hwnd):
-            win32gui.MoveWindow(hwnd, 0, 0, 1920, 1080, True)
-            win32gui.SetForegroundWindow(hwnd)
-            win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
-
-
 def analyseFirstFrameOfVideoChunk(r, frame_number):
     # imagedir = os.path.pardir + "\\images\\"
     with open("chunk.mp4", "wb") as f:
@@ -193,8 +185,23 @@ def getChunkLength(start_of_link):
 
 def trimExtensionList(time_start, time_end, chunk_length, extension_list):
     starting_index = int(int(time_start) / int(chunk_length))
-    ending_index = int(int(time_end) / int(chunk_length))
+    if time_end == 0:
+        ending_index = len(extension_list) - 1
+    else:
+        ending_index = int(int(time_end) / int(chunk_length))
     return extension_list[starting_index:ending_index]
+
+
+def timeParser(time_start, time_end):
+    h_start, m_start, s_start = re.findall(r'[0-9]+(?=[a-zA-Z])', time_start)
+    time_start = int(h_start)*3600 + int(m_start)*60 + int(s_start)
+
+    h_end, m_end, s_end = re.findall(r'[0-9]+(?=[a-zA-Z])', time_end)
+    time_end = int(h_end)*3600 + int(m_end)*60 + int(s_end)
+
+    print(time_start, time_end)
+
+    return time_start, time_end
 
 
 def getVideoParams():
@@ -206,8 +213,8 @@ def getVideoParams():
         else:
             VodID = 216537159
         filter_league = False
-        time_start = 1200
-        time_end = 1260
+        time_start = '0h4m23s'
+        time_end = '1h4m23s'
         channel = "destiny"
         return VodID, channel, filter_league, time_start, time_end
     tmp_var = input("Enter Vod ID or Twitch channel: ")
@@ -218,14 +225,15 @@ def getVideoParams():
         channel = tmp_var
         VodID = None
     filter_league = bool(input("Filter League? Enter 'True' or 'False': "))
-    time_start = int(input("Enter start time: "))
-    time_end = int(input("Enter end time: "))
+    time_start = input("Enter start time: eg. '1h4m23s': ")
+    time_end = input("Enter end time, eg. '1h4m23s', enter 0 to download to the end of the vod: ")
     return VodID, channel, filter_league, time_start, time_end
 
 
 def main():
     dir_path = os.path.dirname(os.path.realpath(__file__))
     vodID, Channel, filter_league, time_start, time_end = getVideoParams()
+    time_start, time_end = timeParser(time_start, time_end)
     if not vodID:
         vodID = getChannelVodID(Channel)
     filepath = fileHandler(vodID, dir_path)
@@ -234,7 +242,6 @@ def main():
     chunk_length = getChunkLength(start_of_link)
     extension_list = trimExtensionList(time_start, time_end, chunk_length, extension_list)
     downloadChunks(extension_list, start_of_link, filepath, filter_league, chunk_length)
-    win32gui.EnumWindows(windowFocus, None)
     if os.path.exists("chunk.mp4"):
         os.remove("chunk.mp4")
 
