@@ -1,12 +1,9 @@
-import numpy
 import requests
 import re
 from time import time, sleep
 import os
 import sys
 import math
-import win32gui
-import win32con
 from cv2 import VideoCapture, imwrite, imread
 import subprocess
 from Source.keyfile import client_id
