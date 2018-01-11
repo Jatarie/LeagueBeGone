@@ -113,7 +113,7 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
         r = requests.get(downLink)
         if filter_league:
             frame_number, league_present = analyseFirstFrameOfVideoChunk(r, frame_number)
-            os.remove("chunk.mp4")
+            os.remove(videodirectory + "\\chunk.mp4")
             frame_number += 1
         if league_present:
             counter += 20
@@ -147,9 +147,6 @@ def analyseVod(segment_length, extension_list, low_link):
     sample_every_n_seconds = 300
     extensions_to_skip = int(sample_every_n_seconds / segment_length)
     sample_extention_list = extension_list[::extensions_to_skip]
-    print(segment_length)
-    print(extensions_to_skip)
-    print(len(sample_extention_list))
     urls = [low_link[0] + sample_extention_list[i] for i in range(len(sample_extention_list))]
     rs = (grequests.get(u) for u in urls)
     responses = grequests.map(rs)
@@ -218,12 +215,16 @@ def fileHandler(vodID, dir_path):
 
 
 def timeParser(time_start, time_end):
-    h_start, m_start, s_start = re.findall(r'[0-9]+(?=[a-zA-Z])', time_start)
-    time_start = int(h_start)*3600 + int(m_start)*60 + int(s_start)
-
-    h_end, m_end, s_end = re.findall(r'[0-9]+(?=[a-zA-Z])', time_end)
-    time_end = int(h_end)*3600 + int(m_end)*60 + int(s_end)
-
+    if time_start != 0:
+        time_start = 0
+    else:
+        h_start, m_start, s_start = re.findall(r'[0-9]+(?=[a-zA-Z])', time_start)
+        time_start = int(h_start)*3600 + int(m_start)*60 + int(s_start)
+    if time_end == "0":
+        time_end = 0
+    else:
+        h_end, m_end, s_end = re.findall(r'[0-9]+(?=[a-zA-Z])', time_end)
+        time_end = int(h_end)*3600 + int(m_end)*60 + int(s_end)
     return time_start, time_end
 
 
@@ -240,15 +241,16 @@ def getVideoParams():
         else:
             VodID = int(input("Enter VodID: "))
         return VodID, channel, filter_league, time_start, time_end
+
     tmp_var = input("Enter Vod ID or Twitch channel: ")
     try:
         VodID = int(tmp_var)
         channel = None
     except ValueError:
         channel = tmp_var
-        VodID = None
+        VodID = getChannelVodID(channel)
     filter_league = bool(input("Filter League? Enter 'True' or 'False': "))
-    time_start = input("Enter start time: eg. '1h4m23s': ")
+    time_start = input("Enter start time: eg. '1h4m23s', enter 0 to download from the start of the vod: ")
     time_end = input("Enter end time, eg. '1h4m23s', enter 0 to download to the end of the vod: ")
     return VodID, channel, filter_league, time_start, time_end
 
