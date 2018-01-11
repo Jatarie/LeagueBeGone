@@ -9,9 +9,6 @@ import grequests
 import numpy
 
 
-client_id = "map2eprcvghxg8cdzdy2207giqnn64"
-
-
 def progressbar(numerator, denominator, time_remaining):
     hour = math.floor(time_remaining/3600)
     time_remaining -= hour * 3600
@@ -53,8 +50,8 @@ def getChannelVodID(Channel):
 def getFirstFrameData(file, frame_counter):
     cap = VideoCapture(file)
     ret, frame = cap.read()
-    imwrite("frame{}.jpg".format(frame_counter), frame)
-    img = imread("frame{}.jpg".format(frame_counter))
+    imwrite("images\\frame{}.jpg".format(frame_counter), frame)
+    img = imread("images\\frame{}.jpg".format(frame_counter))
     # os.remove("frame.jpg")
     if img is None:
         return None
@@ -146,6 +143,9 @@ def analyseVod(segment_length, extension_list, low_link):
     sample_every_n_seconds = 300
     extensions_to_skip = int(sample_every_n_seconds / segment_length)
     sample_extention_list = extension_list[::extensions_to_skip]
+    print(segment_length)
+    print(extensions_to_skip)
+    print(len(sample_extention_list))
     urls = [low_link[0] + sample_extention_list[i] for i in range(len(sample_extention_list))]
     rs = (grequests.get(u) for u in urls)
     responses = grequests.map(rs)
@@ -158,8 +158,7 @@ def analyseVod(segment_length, extension_list, low_link):
         for row in img:
             for pixel in row:
                 frame_value += numpy.sum(pixel)
-        print(frame_counter, frame_value)
-        os.rename("frame{}.jpg".format(frame_counter), "frame{} - {}.jpg".format(frame_counter, frame_value))
+        os.rename("images\\frame{}.jpg".format(frame_counter), "images\\{}.jpg".format(frame_value))
         frame_counter += 1
 
 
@@ -168,9 +167,9 @@ def usherAPIRequest(token, sig, vodID):
                                    "{}?nauthsig={}&nauth={}&allow_source=true".format(vodID, sig, token))
     m3u8links = re.findall(r'(http.+?m3u8)', rawUsherAPIData.text)
     source_m3u8link = m3u8links[0]
-    low_m3u8link = m3u8links[5]
+    low_m3u8link = m3u8links[len(m3u8links)-1]
     raw_m3u8link_data = requests.get(source_m3u8link)
-    segment_length = int(re.findall(r'(?<=EXTINF:)[0-9]', raw_m3u8link_data.text)[0])
+    segment_length = int(re.findall(r'(?<=EXTINF:)[0-9]+', raw_m3u8link_data.text)[0])
     extension_list = (re.findall(r'\n([^#]+)\n', raw_m3u8link_data.text))
 
     source_m3u8linkm_link = re.findall(r'(.+?)(?=index)', source_m3u8link)
@@ -179,6 +178,7 @@ def usherAPIRequest(token, sig, vodID):
 
 
 def twitchAPIRequest(vodID):
+    client_id = "map2eprcvghxg8cdzdy2207giqnn64"
     rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/"
                                         "{}/access_token?&client_id={}".format(vodID, client_id))
     jsonData = rawTwitchAPIJsonData.json()
@@ -193,17 +193,17 @@ def fileHandler(vodID, dir_path):
         os.mkdir(voddir)
     except FileExistsError:
         pass
-    # try:
-    #     os.mkdir(os.path.pardir + "\\images\\")
-    # except FileExistsError:
-    #     pass
+    try:
+        os.mkdir("images")
+    except FileExistsError:
+        pass
     file_list = os.listdir(voddir)
     for file in file_list:
         os.remove(voddir + file)
-    # file_list = os.listdir(dir_path)
-    # for file in file_list:
-    #     if ".jpg" in file:
-    #         os.remove(file)
+    file_list = os.listdir("images")
+    for file in file_list:
+        if ".jpg" in file:
+            os.remove("images\\" + file)
 
     filepath = voddir + str(vodID) + ".mp4"
     try:
@@ -234,7 +234,7 @@ def getVideoParams():
         if debug_vodid == "n":
             VodID = getChannelVodID(channel)
         else:
-            VodID = 216956301
+            VodID = int(input("Enter VodID: "))
         return VodID, channel, filter_league, time_start, time_end
     tmp_var = input("Enter Vod ID or Twitch channel: ")
     try:
