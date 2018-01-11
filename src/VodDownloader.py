@@ -9,6 +9,10 @@ import grequests
 import numpy
 
 
+imagedirectory = os.pardir + "\\images"
+videodirectory = os.pardir + "\\videos"
+
+
 def progressbar(numerator, denominator, time_remaining):
     hour = math.floor(time_remaining/3600)
     time_remaining -= hour * 3600
@@ -50,8 +54,8 @@ def getChannelVodID(Channel):
 def getFirstFrameData(file, frame_counter):
     cap = VideoCapture(file)
     ret, frame = cap.read()
-    imwrite("images\\frame{}.jpg".format(frame_counter), frame)
-    img = imread("images\\frame{}.jpg".format(frame_counter))
+    imwrite("{}\\frame{}.jpg".format(imagedirectory, frame_counter), frame)
+    img = imread("{}\\frame{}.jpg".format(imagedirectory, frame_counter))
     # os.remove("frame.jpg")
     if img is None:
         return None
@@ -60,9 +64,9 @@ def getFirstFrameData(file, frame_counter):
 
 
 def analyseFirstFrameOfVideoChunk(r, frame_number):
-    with open("chunk.mp4", "wb") as f:
+    with open(videodirectory + "\\chunk.mp4", "wb") as f:
         saveChunk(f, r)
-    cap = VideoCapture("chunk.mp4")
+    cap = VideoCapture(videodirectory + "\\chunk.mp4")
     ret, frame = cap.read()
     imwrite("frame{}.jpg".format(frame_number), frame)
     img = imread("frame{}.jpg".format( frame_number))
@@ -152,14 +156,15 @@ def analyseVod(segment_length, extension_list, low_link):
     frame_counter = 0
     for response in responses:
         frame_value = 0
-        with open("analysischunk.mp4", "wb") as f:
+        with open(videodirectory + "\\analysischunk.mp4", "wb") as f:
             saveChunk(f, response)
-        img = getFirstFrameData("analysischunk.mp4", frame_counter)
+        img = getFirstFrameData(videodirectory + "\\analysischunk.mp4", frame_counter)
         for row in img:
             for pixel in row:
                 frame_value += numpy.sum(pixel)
-        os.rename("images\\frame{}.jpg".format(frame_counter), "images\\{}.jpg".format(frame_value))
+        os.rename("{}\\frame{}.jpg".format(imagedirectory, frame_counter), "{}\\{}.jpg".format(imagedirectory, frame_value))
         frame_counter += 1
+    os.remove(videodirectory + "\\analysischunk.mp4")
 
 
 def usherAPIRequest(token, sig, vodID):
@@ -188,24 +193,23 @@ def twitchAPIRequest(vodID):
 
 
 def fileHandler(vodID, dir_path):
-    voddir = os.path.pardir + "\\vods\\"
     try:
-        os.mkdir(voddir)
+        os.mkdir(videodirectory)
     except FileExistsError:
         pass
     try:
-        os.mkdir("images")
+        os.mkdir(imagedirectory)
     except FileExistsError:
         pass
-    file_list = os.listdir(voddir)
+    file_list = os.listdir(videodirectory)
     for file in file_list:
-        os.remove(voddir + file)
-    file_list = os.listdir("images")
+        os.remove(videodirectory + "\\" + file)
+    file_list = os.listdir(imagedirectory)
     for file in file_list:
         if ".jpg" in file:
-            os.remove("images\\" + file)
+            os.remove(imagedirectory + "\\" + file)
 
-    filepath = voddir + str(vodID) + ".mp4"
+    filepath = videodirectory + "\\" + str(vodID) + ".mp4"
     try:
         os.remove(filepath)
     except FileNotFoundError:
@@ -259,8 +263,8 @@ def main():
     analyseVod(segment_length, extension_list, low_link)
     extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
     downloadChunks(extension_list, source_link, filepath, filter_league, segment_length)
-    if os.path.exists("chunk.mp4"):
-        os.remove("chunk.mp4")
+    if os.path.exists(videodirectory + "\\chunk.mp4"):
+        os.remove(videodirectory + "\\chunk.mp4")
 
 
 if __name__ == "__main__":
