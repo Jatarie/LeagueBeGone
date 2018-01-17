@@ -7,13 +7,14 @@ import math
 from cv2 import VideoCapture, imwrite, imread
 import grequests
 import numpy
+import operator
 
 
 imagedirectory = os.pardir + "\\images"
 videodirectory = os.pardir + "\\videos"
 
 
-def progressbar(numerator, denominator, time_remaining):
+def progressBar(numerator, denominator, time_remaining):
     hour = math.floor(time_remaining/3600)
     time_remaining -= hour * 3600
     minute = math.floor(time_remaining / 60)
@@ -34,7 +35,7 @@ def progressbar(numerator, denominator, time_remaining):
     sys.stdout.flush()
 
 
-def timeremaining(start, extension_list, i):
+def timeRemaining(start, extension_list, i):
     time_elapsed = time() - start
     chunks_completed = i
     if time_elapsed == 0 or chunks_completed == 0:
@@ -107,8 +108,8 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
     file_open = False
 
     while len_extension_list > counter:
-        time_remaining = timeremaining(start, extension_list, counter)
-        progressbar(counter+1, len(extension_list), time_remaining)
+        time_remaining = timeRemaining(start, extension_list, counter)
+        progressBar(counter + 1, len(extension_list), time_remaining)
         downLink = (source_link[0] + extension_list[counter])
         r = requests.get(downLink)
         if filter_league:
@@ -151,17 +152,31 @@ def analyseVod(segment_length, extension_list, low_link):
     rs = (grequests.get(u) for u in urls)
     responses = grequests.map(rs)
     frame_counter = 0
+    pixel_list = []
     for response in responses:
         frame_value = 0
+        rgb = {"red": 0, "green": 0, "blue": 0}
         with open(videodirectory + "\\analysischunk.mp4", "wb") as f:
             saveChunk(f, response)
         img = getFirstFrameData(videodirectory + "\\analysischunk.mp4", frame_counter)
         for row in img:
             for pixel in row:
+                rgb["red"] += int(pixel[2])
+                rgb["green"] += int(pixel[1])
+                rgb["blue"] += int(pixel[0])
                 frame_value += numpy.sum(pixel)
-        os.rename("{}\\frame{}.jpg".format(imagedirectory, frame_counter), "{}\\{}.jpg".format(imagedirectory, frame_value))
+        pixel_list.append(frame_value)
+        sum_vals = sum(rgb.values())
+        rgb["red"] /= sum_vals / 100
+        rgb["green"] /= sum_vals / 100
+        rgb["blue"] /= sum_vals / 100
+        # print(max(rgb.items(), key=operator.itemgetter(1))[0])
+        # print(max(rgb.values()))
+        # os.rename("{}\\frame{}.jpg".format(imagedirectory, frame_counter), "{}\\{}.jpg".format(imagedirectory, frame_value))
+        os.rename("{}\\frame{}.jpg".format(imagedirectory, frame_counter), "{}\\{}-{:.3f}.jpg".format(imagedirectory, max(rgb.items(), key=operator.itemgetter(1))[0], max(rgb.values())))
         frame_counter += 1
     os.remove(videodirectory + "\\analysischunk.mp4")
+    return pixel_list
 
 
 def usherAPIRequest(token, sig, vodID):
@@ -228,13 +243,27 @@ def timeParser(time_start, time_end):
     return time_start, time_end
 
 
+def labelSegments(pixel_list):
+    pixel_dict = {"league": [4667763, 12569208], "lords": [9567165, 13584910],
+                  "nier": [4891854, 23199314], "pubg": [10633104, 17425303], "memes": [0, 31501908]}
+    i = 0
+    for frame in pixel_list:
+        potential = []
+        for key in pixel_dict.keys():
+            if pixel_dict[key][0] < frame < pixel_dict[key][1]:
+                potential.append(key)
+        print("{} {}".format(i, potential))
+        i+=1
+    sys.exit()
+
+
 def getVideoParams():
     debug = input("Debug?(y/n) ")
     if debug == "y":
         filter_league = False
         time_start = '0h4m23s'
         time_end = '1h4m23s'
-        channel = "draskyl"
+        channel = "destiny"
         debug_vodid = input("VodID?(y/n) ")
         if debug_vodid == "n":
             VodID = getChannelVodID(channel)
@@ -262,12 +291,24 @@ def main():
     filepath = fileHandler(vodID, dir_path)
     token, sig = twitchAPIRequest(vodID)
     extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID)
-    analyseVod(segment_length, extension_list, low_link)
+    pixel_list = analyseVod(segment_length, extension_list, low_link)
+    labelSegments(pixel_list)
     extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
     downloadChunks(extension_list, source_link, filepath, filter_league, segment_length)
     if os.path.exists(videodirectory + "\\chunk.mp4"):
         os.remove(videodirectory + "\\chunk.mp4")
 
+try:
+    file_list = os.listdir(imagedirectory)
+    print(file_list)
+    for file in file_list:
+        if "frame" in file or "red" in file or "blue" in file or "green" in file:
+            os.remove("E:\Projects\LeagueBeGone\images\\" + file)
+        else:
+            os.rename("E:\Projects\LeagueBeGone\images\\" + file, "E:\Projects\LeagueBeGone\imagearchive\\" + file)
+except:
+    pass
 
 if __name__ == "__main__":
+
     main()
