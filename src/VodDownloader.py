@@ -46,7 +46,9 @@ def timeRemaining(start, extension_list, i):
 
 
 def getChannelVodID(Channel, vods_to_get):
-    r = requests.get("https://api.twitch.tv/kraken/channels/{}/videos?client_id=map2eprcvghxg8cdzdy2207giqnn64&broadcast_type=archive".format(Channel))
+    r = requests.get(
+        "https://api.twitch.tv/kraken/channels/{}/videos?client_id=map2eprcvghxg8cdzdy2207giqnn64&broadcast_type=archive".format(
+            Channel))
     data = r.json()
     vodid_list = [data["videos"][n]["_id"][1:] for n in range(vods_to_get)]
     return vodid_list
@@ -57,8 +59,6 @@ def getFirstFrameData(file, frame_counter):
     ret, frame = cap.read()
     imwrite("{}\\frame{}.jpg".format(imagedirectory, frame_counter), frame)
     img = imread("{}\\frame{}.jpg".format(imagedirectory, frame_counter))
-    print(img)
-
     # os.remove("frame.jpg")
     if img is None:
         return None
@@ -100,16 +100,17 @@ def saveChunk(f, r):
             f.write(chunk)
 
 
-def downloadChunks(extension_list, source_link, filepath, filter_league, segment_length):
+def downloadChunks(extension_list, source_link, filepath, filter_league, segment_length, first_vod):
     print("\nStarting download...")
     start = time()
     frame_number = 0
     league_present = False
     len_extension_list = len(extension_list)
     counter = 0
-    f = open(filepath, "ab")
     file_open = False
+    f = open(filepath, "ab")
     first_mins_of_league_saved = False
+    first_20_minutes_skipped = False
     league_seconds_to_save = 90
 
     while len_extension_list > counter:
@@ -133,7 +134,11 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
                 league_seconds_to_save = 90
 
         if league_present and first_mins_of_league_saved:
-            counter += (60 / segment_length)
+            if not first_20_minutes_skipped:
+                counter += int((60*19) / segment_length)
+                first_20_minutes_skipped = True
+                continue
+            counter += int((60 / segment_length))
             continue
         saveChunk(f, r)
         if not file_open:
@@ -214,7 +219,8 @@ def usherAPIRequest(token, sig, vodID):
 
 def twitchAPIRequest(vodID):
     client_id = "map2eprcvghxg8cdzdy2207giqnn64"
-    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/{}/access_token?&client_id={}".format(vodID, client_id))
+    rawTwitchAPIJsonData = requests.get(
+        "https://api.twitch.tv/api/vods/{}/access_token?&client_id={}".format(vodID, client_id))
     jsonData = rawTwitchAPIJsonData.json()
     token = jsonData["token"]
     sig = jsonData["sig"]
@@ -326,8 +332,9 @@ def main():
     dir_path = os.path.dirname(os.path.realpath(__file__))
     vodID_list, Channel, filter_league, time_start, time_end = getVideoParams()
     time_start, time_end = timeParser(time_start, time_end)
-    filepath = fileHandler(vodID_list[0], dir_path)
     print(vodID_list)
+    first_vod = True
+    filepath = fileHandler(vodID_list[0], dir_path)
     for vodID in vodID_list:
         print(vodID)
         token, sig = twitchAPIRequest(vodID)
@@ -335,7 +342,10 @@ def main():
         # pixel_list = analyseVod(segment_length, extension_list, low_link)
         # labelSegments(pixel_list)
         extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
-        downloadChunks(extension_list, source_link, filepath, filter_league, segment_length)
+        time_start = 0
+        time_end = 0
+        downloadChunks(extension_list, source_link, filepath, filter_league, segment_length, first_vod)
+        first_vod = False
     if os.path.exists(videodirectory + "\\chunk.mp4"):
         os.remove(videodirectory + "\\chunk.mp4")
 
