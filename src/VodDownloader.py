@@ -8,14 +8,14 @@ from cv2 import VideoCapture, imwrite, imread
 import grequests
 import numpy
 import operator
+from src.supress_stdout_stderr import suppress_stdout_stderr
 
 
 imagedirectory = os.pardir + "\\images"
 videodirectory = os.pardir + "\\videos"
 
-
 def progressBar(numerator, denominator, time_remaining):
-    hour = math.floor(time_remaining/3600)
+    hour = math.floor(time_remaining / 3600)
     time_remaining -= hour * 3600
     minute = math.floor(time_remaining / 60)
     time_remaining -= minute * 60
@@ -29,7 +29,7 @@ def progressBar(numerator, denominator, time_remaining):
     for _ in range(remaining):
         progress_string += "|"
     progress_string += " ]"
-    progress_string = "\r{} est: {}h {}m {:.0f}s [{}/{}]"\
+    progress_string = "\r{} est: {}h {}m {:.0f}s [{}/{}]" \
         .format(progress_string, hour, minute, second, numerator, denominator)
     sys.stdout.write(progress_string)
     sys.stdout.flush()
@@ -57,6 +57,8 @@ def getFirstFrameData(file, frame_counter):
     ret, frame = cap.read()
     imwrite("{}\\frame{}.jpg".format(imagedirectory, frame_counter), frame)
     img = imread("{}\\frame{}.jpg".format(imagedirectory, frame_counter))
+    print(img)
+
     # os.remove("frame.jpg")
     if img is None:
         return None
@@ -67,10 +69,11 @@ def getFirstFrameData(file, frame_counter):
 def analyseFirstFrameOfVideoChunk(r, frame_number):
     with open(videodirectory + "\\chunk.mp4", "wb") as f:
         saveChunk(f, r)
+    sleep(1)
     cap = VideoCapture(videodirectory + "\\chunk.mp4")
     ret, frame = cap.read()
     imwrite("frame{}.jpg".format(frame_number), frame)
-    img = imread("frame{}.jpg".format( frame_number))
+    img = imread("frame{}.jpg".format(frame_number))
     os.remove("frame{}.jpg".format(frame_number))
     if img is None:
         return frame_number, False
@@ -113,7 +116,9 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
         downLink = (source_link[0] + extension_list[counter])
         r = requests.get(downLink)
         if filter_league:
-            frame_number, league_present = analyseFirstFrameOfVideoChunk(r, frame_number)
+            with suppress_stdout_stderr():
+                frame_number, league_present = analyseFirstFrameOfVideoChunk(r, frame_number)
+
             os.remove(videodirectory + "\\chunk.mp4")
             frame_number += 1
         if league_present:
@@ -129,7 +134,7 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
     sys.stdout.write("\rDownloaded completed\n")
     sys.stdout.flush()
     statinfo = os.stat(filepath)
-    elapsedTime = time()-start
+    elapsedTime = time() - start
     mbDownloaded = statinfo.st_size / 1000000
     print("{:.2f} MB downladed in {:.2f} seconds at a rate of {:.2f} MB/s"
           .format(mbDownloaded, elapsedTime, (mbDownloaded / elapsedTime)))
@@ -173,7 +178,9 @@ def analyseVod(segment_length, extension_list, low_link):
         # print(max(rgb.items(), key=operator.itemgetter(1))[0])
         # print(max(rgb.values()))
         # os.rename("{}\\frame{}.jpg".format(imagedirectory, frame_counter), "{}\\{}.jpg".format(imagedirectory, frame_value))
-        os.rename("{}\\frame{}.jpg".format(imagedirectory, frame_counter), "{}\\{}-{:.3f}.jpg".format(imagedirectory, max(rgb.items(), key=operator.itemgetter(1))[0], max(rgb.values())))
+        os.rename("{}\\frame{}.jpg".format(imagedirectory, frame_counter),
+                  "{}\\{}-{:.3f}.jpg".format(imagedirectory, max(rgb.items(), key=operator.itemgetter(1))[0],
+                                             max(rgb.values())))
         frame_counter += 1
     os.remove(videodirectory + "\\analysischunk.mp4")
     return pixel_list
@@ -184,7 +191,7 @@ def usherAPIRequest(token, sig, vodID):
                                    "{}?nauthsig={}&nauth={}&allow_source=true".format(vodID, sig, token))
     m3u8links = re.findall(r'(http.+?m3u8)', rawUsherAPIData.text)
     source_m3u8link = m3u8links[0]
-    low_m3u8link = m3u8links[len(m3u8links)-1]
+    low_m3u8link = m3u8links[len(m3u8links) - 1]
     raw_m3u8link_data = requests.get(source_m3u8link)
     segment_length = int(re.findall(r'(?<=EXTINF:)[0-9]+', raw_m3u8link_data.text)[0])
     extension_list = (re.findall(r'\n([^#]+)\n', raw_m3u8link_data.text))
@@ -205,6 +212,22 @@ def twitchAPIRequest(vodID):
 
 
 def fileHandler(vodID, dir_path):
+    try:
+        os.mkdir("..\\imagearchive")
+    except FileExistsError:
+        pass
+    try:
+        file_list = os.listdir(imagedirectory)
+        for file in file_list:
+            if all(k in file for k in "frame"):
+                os.remove("..\\images\\" + file)
+            else:
+                try:
+                    os.rename("..\\images\\" + file, "..\\imagearchive\\" + file)
+                except:
+                    pass
+    except FileNotFoundError:
+        pass
     try:
         os.mkdir(videodirectory)
     except FileExistsError:
@@ -234,12 +257,12 @@ def timeParser(time_start, time_end):
         time_start = 0
     else:
         h_start, m_start, s_start = re.findall(r'[0-9]+(?=[a-zA-Z])', time_start)
-        time_start = int(h_start)*3600 + int(m_start)*60 + int(s_start)
+        time_start = int(h_start) * 3600 + int(m_start) * 60 + int(s_start)
     if time_end == "0":
         time_end = 0
     else:
         h_end, m_end, s_end = re.findall(r'[0-9]+(?=[a-zA-Z])', time_end)
-        time_end = int(h_end)*3600 + int(m_end)*60 + int(s_end)
+        time_end = int(h_end) * 3600 + int(m_end) * 60 + int(s_end)
     return time_start, time_end
 
 
@@ -253,7 +276,7 @@ def labelSegments(pixel_list):
             if pixel_dict[key][0] < frame < pixel_dict[key][1]:
                 potential.append(key)
         print("{} {}".format(i, potential))
-        i+=1
+        i += 1
     sys.exit()
 
 
@@ -278,7 +301,12 @@ def getVideoParams():
     except ValueError:
         channel = tmp_var
         VodID = getChannelVodID(channel)
-    filter_league = bool(input("Filter League? Enter 'True' or 'False': "))
+    filter_league = input("Filter league?(y/n)")
+    if filter_league == "y":
+        filter_league = True
+    elif filter_league == "n":
+        filter_league = False
+    print(filter_league)
     time_start = input("Enter start time: eg. '1h4m23s', enter 0 to download from the start of the vod: ")
     time_end = input("Enter end time, eg. '1h4m23s', enter 0 to download to the end of the vod: ")
     return VodID, channel, filter_league, time_start, time_end
@@ -291,24 +319,13 @@ def main():
     filepath = fileHandler(vodID, dir_path)
     token, sig = twitchAPIRequest(vodID)
     extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID)
-    pixel_list = analyseVod(segment_length, extension_list, low_link)
-    labelSegments(pixel_list)
+    # pixel_list = analyseVod(segment_length, extension_list, low_link)
+    # labelSegments(pixel_list)
     extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
     downloadChunks(extension_list, source_link, filepath, filter_league, segment_length)
     if os.path.exists(videodirectory + "\\chunk.mp4"):
         os.remove(videodirectory + "\\chunk.mp4")
 
-try:
-    file_list = os.listdir(imagedirectory)
-    print(file_list)
-    for file in file_list:
-        if "frame" in file or "red" in file or "blue" in file or "green" in file:
-            os.remove("E:\Projects\LeagueBeGone\images\\" + file)
-        else:
-            os.rename("E:\Projects\LeagueBeGone\images\\" + file, "E:\Projects\LeagueBeGone\imagearchive\\" + file)
-except:
-    pass
 
 if __name__ == "__main__":
-
     main()
