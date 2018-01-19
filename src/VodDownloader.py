@@ -10,9 +10,9 @@ import numpy
 import operator
 from src.supress_stdout_stderr import suppress_stdout_stderr
 
-
 imagedirectory = os.pardir + "\\images"
 videodirectory = os.pardir + "\\videos"
+
 
 def progressBar(numerator, denominator, time_remaining):
     hour = math.floor(time_remaining / 3600)
@@ -109,6 +109,8 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
     counter = 0
     f = open(filepath, "ab")
     file_open = False
+    first_mins_of_league_saved = False
+    league_seconds_to_save = 90
 
     while len_extension_list > counter:
         time_remaining = timeRemaining(start, extension_list, counter)
@@ -121,8 +123,18 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
 
             os.remove(videodirectory + "\\chunk.mp4")
             frame_number += 1
-        if league_present:
-            counter += 20
+
+        if not league_present:
+            first_mins_of_league_saved = False
+
+        if league_present and not first_mins_of_league_saved:
+            league_seconds_to_save -= segment_length
+            if league_seconds_to_save <= 0:
+                first_mins_of_league_saved = True
+                league_seconds_to_save = 90
+
+        if league_present and first_mins_of_league_saved:
+            counter += (60 / segment_length)
             continue
         saveChunk(f, r)
         if not file_open:
@@ -253,7 +265,7 @@ def fileHandler(vodID, dir_path):
 
 
 def timeParser(time_start, time_end):
-    if time_start != 0:
+    if time_start == "0":
         time_start = 0
     else:
         h_start, m_start, s_start = re.findall(r'[0-9]+(?=[a-zA-Z])', time_start)
@@ -306,7 +318,6 @@ def getVideoParams():
         filter_league = True
     elif filter_league == "n":
         filter_league = False
-    print(filter_league)
     time_start = input("Enter start time: eg. '1h4m23s', enter 0 to download from the start of the vod: ")
     time_end = input("Enter end time, eg. '1h4m23s', enter 0 to download to the end of the vod: ")
     return VodID, channel, filter_league, time_start, time_end
