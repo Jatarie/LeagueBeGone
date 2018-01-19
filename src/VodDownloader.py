@@ -45,11 +45,11 @@ def timeRemaining(start, extension_list, i):
     return ave_chunk_completion_time * chunks_remaining
 
 
-def getChannelVodID(Channel):
-    r = requests.get("https://api.twitch.tv/kraken/channels/"
-                     "{}/videos?client_id=map2eprcvghxg8cdzdy2207giqnn64&broadcast_type=archive".format(Channel))
+def getChannelVodID(Channel, vods_to_get):
+    r = requests.get("https://api.twitch.tv/kraken/channels/{}/videos?client_id=map2eprcvghxg8cdzdy2207giqnn64&broadcast_type=archive".format(Channel))
     data = r.json()
-    return int(data["videos"][0]["url"][29:])
+    vodid_list = [data["videos"][n]["_id"][1:] for n in range(vods_to_get)]
+    return vodid_list
 
 
 def getFirstFrameData(file, frame_counter):
@@ -120,7 +120,6 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
         if filter_league:
             with suppress_stdout_stderr():
                 frame_number, league_present = analyseFirstFrameOfVideoChunk(r, frame_number)
-
             os.remove(videodirectory + "\\chunk.mp4")
             frame_number += 1
 
@@ -215,8 +214,7 @@ def usherAPIRequest(token, sig, vodID):
 
 def twitchAPIRequest(vodID):
     client_id = "map2eprcvghxg8cdzdy2207giqnn64"
-    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/"
-                                        "{}/access_token?&client_id={}".format(vodID, client_id))
+    rawTwitchAPIJsonData = requests.get("https://api.twitch.tv/api/vods/{}/access_token?&client_id={}".format(vodID, client_id))
     jsonData = rawTwitchAPIJsonData.json()
     token = jsonData["token"]
     sig = jsonData["sig"]
@@ -308,11 +306,12 @@ def getVideoParams():
 
     tmp_var = input("Enter Vod ID or Twitch channel: ")
     try:
-        VodID = int(tmp_var)
+        VodIDs = int(tmp_var)
         channel = None
     except ValueError:
         channel = tmp_var
-        VodID = getChannelVodID(channel)
+        vods_to_get = int(input("Enter how many of the most recent vods to get: "))
+        VodIDs = getChannelVodID(channel, vods_to_get)[::-1]
     filter_league = input("Filter league?(y/n)")
     if filter_league == "y":
         filter_league = True
@@ -320,20 +319,23 @@ def getVideoParams():
         filter_league = False
     time_start = input("Enter start time: eg. '1h4m23s', enter 0 to download from the start of the vod: ")
     time_end = input("Enter end time, eg. '1h4m23s', enter 0 to download to the end of the vod: ")
-    return VodID, channel, filter_league, time_start, time_end
+    return VodIDs, channel, filter_league, time_start, time_end
 
 
 def main():
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    vodID, Channel, filter_league, time_start, time_end = getVideoParams()
+    vodID_list, Channel, filter_league, time_start, time_end = getVideoParams()
     time_start, time_end = timeParser(time_start, time_end)
-    filepath = fileHandler(vodID, dir_path)
-    token, sig = twitchAPIRequest(vodID)
-    extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID)
-    # pixel_list = analyseVod(segment_length, extension_list, low_link)
-    # labelSegments(pixel_list)
-    extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
-    downloadChunks(extension_list, source_link, filepath, filter_league, segment_length)
+    filepath = fileHandler(vodID_list[0], dir_path)
+    print(vodID_list)
+    for vodID in vodID_list:
+        print(vodID)
+        token, sig = twitchAPIRequest(vodID)
+        extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID)
+        # pixel_list = analyseVod(segment_length, extension_list, low_link)
+        # labelSegments(pixel_list)
+        extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
+        downloadChunks(extension_list, source_link, filepath, filter_league, segment_length)
     if os.path.exists(videodirectory + "\\chunk.mp4"):
         os.remove(videodirectory + "\\chunk.mp4")
 
