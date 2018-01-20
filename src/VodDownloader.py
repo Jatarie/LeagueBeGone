@@ -100,7 +100,7 @@ def saveChunk(f, r):
             f.write(chunk)
 
 
-def downloadChunks(extension_list, source_link, filepath, filter_league, segment_length, first_vod):
+def downloadChunks(extension_list, source_link, filepath, filter_league, segment_length, first_vod, stream):
     print("\nStarting download...")
     start = time()
     frame_number = 0
@@ -110,9 +110,10 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
     file_open = False
     f = open(filepath, "ab")
     first_mins_of_league_saved = False
+    time_first_mins_of_league_saved = 0
     first_20_minutes_skipped = False
     league_seconds_to_save = 90
-
+    print(int(extension_list[-1][:-3]) + 1)
     while len_extension_list > counter:
         time_remaining = timeRemaining(start, extension_list, counter)
         progressBar(counter + 1, len(extension_list), time_remaining)
@@ -125,12 +126,15 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
             frame_number += 1
 
         if not league_present:
-            first_mins_of_league_saved = False
+            current_extention = int(re.findall(r'[0-9]+', extension_list[counter])[0])
+            if time_first_mins_of_league_saved - current_extention > (20*60) / segment_length:
+                first_mins_of_league_saved = False
 
         if league_present and not first_mins_of_league_saved:
             league_seconds_to_save -= segment_length
             if league_seconds_to_save <= 0:
                 first_mins_of_league_saved = True
+                time_first_mins_of_league_saved = int(re.findall(r'[0-9]+', extension_list[counter])[0])
                 league_seconds_to_save = 90
 
         if league_present and first_mins_of_league_saved:
@@ -145,6 +149,17 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
             os.startfile(filepath)
             file_open = True
         counter += 1
+
+    if stream:
+        last_ext = int(extension_list[-1][:-3]) + 1
+        print("\nStarting streaming...")
+        while True:
+            r = requests.get(source_link[0] + str(last_ext) + ".ts")
+            if r.status_code == 200:
+                saveChunk(f, r)
+                last_ext += 1
+            if r.status_code == 403:
+                sleep(int(segment_length))
 
     sleep(0.1)
     sys.stdout.write("\rDownloaded completed\n")
@@ -318,19 +333,24 @@ def getVideoParams():
         channel = tmp_var
         vods_to_get = int(input("Enter how many of the most recent vods to get: "))
         VodIDs = getChannelVodID(channel, vods_to_get)[::-1]
-    filter_league = input("Filter league?(y/n)")
+    filter_league = input("Filter league?(y/n) ")
     if filter_league == "y":
         filter_league = True
     elif filter_league == "n":
         filter_league = False
     time_start = input("Enter start time: eg. '1h4m23s', enter 0 to download from the start of the vod: ")
     time_end = input("Enter end time, eg. '1h4m23s', enter 0 to download to the end of the vod: ")
-    return VodIDs, channel, filter_league, time_start, time_end
+    stream = input("Stream after reaching end of vod?(y/n) ")
+    if stream == "y":
+        stream = True
+    else:
+        stream = False
+    return VodIDs, channel, filter_league, time_start, time_end, stream
 
 
 def main():
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    vodID_list, Channel, filter_league, time_start, time_end = getVideoParams()
+    vodID_list, Channel, filter_league, time_start, time_end, stream = getVideoParams()
     time_start, time_end = timeParser(time_start, time_end)
     print(vodID_list)
     first_vod = True
@@ -344,7 +364,7 @@ def main():
         extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
         time_start = 0
         time_end = 0
-        downloadChunks(extension_list, source_link, filepath, filter_league, segment_length, first_vod)
+        downloadChunks(extension_list, source_link, filepath, filter_league, segment_length, first_vod, stream)
         first_vod = False
     if os.path.exists(videodirectory + "\\chunk.mp4"):
         os.remove(videodirectory + "\\chunk.mp4")
