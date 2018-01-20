@@ -127,7 +127,7 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
 
         if not league_present:
             current_extention = int(re.findall(r'[0-9]+', extension_list[counter])[0])
-            if time_first_mins_of_league_saved - current_extention > (20*60) / segment_length:
+            if time_first_mins_of_league_saved - current_extention > (20 * 60) / segment_length:
                 first_mins_of_league_saved = False
 
         if league_present and not first_mins_of_league_saved:
@@ -139,7 +139,7 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
 
         if league_present and first_mins_of_league_saved:
             if not first_20_minutes_skipped:
-                counter += int((60*19) / segment_length)
+                counter += int((60 * 19) / segment_length)
                 first_20_minutes_skipped = True
                 continue
             counter += int((60 / segment_length))
