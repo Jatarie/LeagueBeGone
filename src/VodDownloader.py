@@ -217,7 +217,7 @@ def analyseVod(segment_length, extension_list, low_link):
     return pixel_list
 
 
-def usherAPIRequest(token, sig, vodID):
+def usherAPIRequest(token, sig, vodID, filter_muted):
     rawUsherAPIData = requests.get("http://usher.twitch.tv/vod/"
                                    "{}?nauthsig={}&nauth={}&allow_source=true".format(vodID, sig, token))
     m3u8links = re.findall(r'(http.+?m3u8)', rawUsherAPIData.text)
@@ -226,6 +226,10 @@ def usherAPIRequest(token, sig, vodID):
     raw_m3u8link_data = requests.get(source_m3u8link)
     segment_length = int(re.findall(r'(?<=EXTINF:)[0-9]+', raw_m3u8link_data.text)[0])
     extension_list = (re.findall(r'\n([^#]+)\n', raw_m3u8link_data.text))
+    if filter_muted:
+        for i in range(len(extension_list)):
+            if "muted" in extension_list[i]:
+                del(extension_list[i])
 
     source_m3u8linkm_link = re.findall(r'(.+?)(?=index)', source_m3u8link)
     low_m3u8link_link = re.findall(r'(.+?)(?=index)', low_m3u8link)
@@ -345,12 +349,17 @@ def getVideoParams():
         stream = True
     else:
         stream = False
-    return VodIDs, channel, filter_league, time_start, time_end, stream
+    filter_muted = input("Filter muted segments(y/n): ")
+    if filter_muted == "y":
+        filter_muted = True
+    else:
+        filter_muted = False
+    return VodIDs, channel, filter_league, time_start, time_end, stream, filter_muted
 
 
 def main():
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    vodID_list, Channel, filter_league, time_start, time_end, stream = getVideoParams()
+    vodID_list, Channel, filter_league, time_start, time_end, stream, filter_muted = getVideoParams()
     time_start, time_end = timeParser(time_start, time_end)
     print(vodID_list)
     first_vod = True
@@ -358,7 +367,7 @@ def main():
     for vodID in vodID_list:
         print(vodID)
         token, sig = twitchAPIRequest(vodID)
-        extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID)
+        extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID, filter_muted)
         # pixel_list = analyseVod(segment_length, extension_list, low_link)
         # labelSegments(pixel_list)
         extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
