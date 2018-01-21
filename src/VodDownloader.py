@@ -8,6 +8,9 @@ from cv2 import VideoCapture, imwrite, imread
 import grequests
 import numpy
 import operator
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
 from src.supress_stdout_stderr import suppress_stdout_stderr
 
 imagedirectory = os.pardir + "\\images"
@@ -113,7 +116,6 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
     time_first_mins_of_league_saved = 0
     first_20_minutes_skipped = False
     league_seconds_to_save = 90
-    print(int(extension_list[-1][:-3]) + 1)
     while len_extension_list > counter:
         time_remaining = timeRemaining(start, extension_list, counter)
         progressBar(counter + 1, len(extension_list), time_remaining)
@@ -171,13 +173,18 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
           .format(mbDownloaded, elapsedTime, (mbDownloaded / elapsedTime)))
 
 
-def trimExtensionList(time_start, time_end, segment_length, extension_list):
+def trimExtensionList(time_start, time_end, segment_length, extension_list, filter_muted):
+    print(extension_list)
     starting_index = int(int(time_start) / int(segment_length))
     if time_end == 0:
         ending_index = len(extension_list) - 1
     else:
         ending_index = int(int(time_end) / int(segment_length))
-    return extension_list[starting_index:ending_index]
+    extension_list = extension_list[starting_index:ending_index]
+    if filter_muted:
+        no_muted_extension_list = [i for i in extension_list if "muted" not in i]
+        extension_list = no_muted_extension_list
+    return extension_list
 
 
 def analyseVod(segment_length, extension_list, low_link):
@@ -226,10 +233,6 @@ def usherAPIRequest(token, sig, vodID, filter_muted):
     raw_m3u8link_data = requests.get(source_m3u8link)
     segment_length = int(re.findall(r'(?<=EXTINF:)[0-9]+', raw_m3u8link_data.text)[0])
     extension_list = (re.findall(r'\n([^#]+)\n', raw_m3u8link_data.text))
-    if filter_muted:
-        for i in range(len(extension_list)):
-            if "muted" in extension_list[i]:
-                del(extension_list[i])
 
     source_m3u8linkm_link = re.findall(r'(.+?)(?=index)', source_m3u8link)
     low_m3u8link_link = re.findall(r'(.+?)(?=index)', low_m3u8link)
@@ -318,16 +321,15 @@ def labelSegments(pixel_list):
 def getVideoParams():
     debug = input("Debug?(y/n) ")
     if debug == "y":
-        filter_league = False
-        time_start = '0h4m23s'
-        time_end = '1h4m23s'
+        filter_league = True
+        stream = False
+        filter_muted = True
+        vods_to_get = 2
+        time_start = '3h14m0s'
+        time_end = '0'
         channel = "destiny"
-        debug_vodid = input("VodID?(y/n) ")
-        if debug_vodid == "n":
-            VodID = getChannelVodID(channel)
-        else:
-            VodID = int(input("Enter VodID: "))
-        return VodID, channel, filter_league, time_start, time_end
+        VodIDs = getChannelVodID(channel, vods_to_get)[::-1]
+        return VodIDs, channel, filter_league, time_start, time_end, stream, filter_muted
 
     tmp_var = input("Enter Vod ID or Twitch channel: ")
     try:
@@ -370,7 +372,7 @@ def main():
         extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID, filter_muted)
         # pixel_list = analyseVod(segment_length, extension_list, low_link)
         # labelSegments(pixel_list)
-        extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list)
+        extension_list = trimExtensionList(time_start, time_end, segment_length, extension_list, filter_muted)
         time_start = 0
         time_end = 0
         downloadChunks(extension_list, source_link, filepath, filter_league, segment_length, first_vod, stream)
