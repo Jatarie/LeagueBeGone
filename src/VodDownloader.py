@@ -4,7 +4,7 @@ from time import time, sleep
 import os
 import sys
 import math
-from cv2 import VideoCapture, imwrite, imread
+import cv2
 import grequests
 import numpy
 import operator
@@ -58,10 +58,10 @@ def getChannelVodID(Channel, vods_to_get):
 
 
 def getFirstFrameData(file, frame_counter):
-    cap = VideoCapture(file)
+    cap = cv2.VideoCapture(file)
     ret, frame = cap.read()
-    imwrite("{}\\frame{}.jpg".format(imagedirectory, frame_counter), frame)
-    img = imread("{}\\frame{}.jpg".format(imagedirectory, frame_counter))
+    cv2.imwrite("{}\\frame{}.jpg".format(imagedirectory, frame_counter), frame)
+    img = cv2.imread("{}\\frame{}.jpg".format(imagedirectory, frame_counter))
     # os.remove("frame.jpg")
     if img is None:
         return None
@@ -73,11 +73,11 @@ def analyseFirstFrameOfVideoChunk(r, frame_number):
     with open(videodirectory + "\\chunk.mp4", "wb") as f:
         saveChunk(f, r)
     sleep(1)
-    cap = VideoCapture(videodirectory + "\\chunk.mp4")
+    cap = cv2.VideoCapture(videodirectory + "\\chunk.mp4")
     ret, frame = cap.read()
-    imwrite("frame{}.jpg".format(frame_number), frame)
-    img = imread("frame{}.jpg".format(frame_number))
-    os.remove("frame{}.jpg".format(frame_number))
+    cv2.imwrite("..\\images\\frame{}.jpg".format(frame_number), frame)
+    img = cv2.imread("..\\images\\frame{}.jpg".format(frame_number))
+    # os.remove("frame{}.jpg".format(frame_number))
     if img is None:
         return frame_number, False
     px1 = img[1056, 1893]
@@ -98,7 +98,12 @@ def analyseFirstFrameOfVideoChunk(r, frame_number):
 
 
 def saveChunk(f, r):
+    # ff = open("shit.txt", "a")
     for chunk in r.iter_content(chunk_size=255):
+        # x = re.findall(r'(metadata.+?})', str(chunk))
+        # for i in x:
+        #     ff.write("{}\n".format(i))
+        # ff.write("\n")
         if chunk:
             f.write(chunk)
 
@@ -126,7 +131,6 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
                 frame_number, league_present = analyseFirstFrameOfVideoChunk(r, frame_number)
             os.remove(videodirectory + "\\chunk.mp4")
             frame_number += 1
-
         if not league_present:
             current_extention = int(re.findall(r'[0-9]+', extension_list[counter])[0])
             if time_first_mins_of_league_saved - current_extention > (20*60) / segment_length:
@@ -152,7 +156,7 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
             file_open = True
         counter += 1
 
-    if stream:
+    if stream and counter >= len_extension_list:
         last_ext = int(extension_list[-1][:-3]) + 1
         print("\nStarting streaming...")
         while True:
@@ -174,7 +178,6 @@ def downloadChunks(extension_list, source_link, filepath, filter_league, segment
 
 
 def trimExtensionList(time_start, time_end, segment_length, extension_list, filter_muted):
-    print(extension_list)
     starting_index = int(int(time_start) / int(segment_length))
     if time_end == 0:
         ending_index = len(extension_list) - 1
@@ -324,8 +327,8 @@ def getVideoParams():
         filter_league = True
         stream = False
         filter_muted = True
-        vods_to_get = 2
-        time_start = '3h14m0s'
+        vods_to_get = 1
+        time_start = '0h4m0s'
         time_end = '0'
         channel = "destiny"
         VodIDs = getChannelVodID(channel, vods_to_get)[::-1]
@@ -363,11 +366,9 @@ def main():
     dir_path = os.path.dirname(os.path.realpath(__file__))
     vodID_list, Channel, filter_league, time_start, time_end, stream, filter_muted = getVideoParams()
     time_start, time_end = timeParser(time_start, time_end)
-    print(vodID_list)
     first_vod = True
     filepath = fileHandler(vodID_list[0], dir_path)
     for vodID in vodID_list:
-        print(vodID)
         token, sig = twitchAPIRequest(vodID)
         extension_list, segment_length, source_link, low_link = usherAPIRequest(token, sig, vodID, filter_muted)
         # pixel_list = analyseVod(segment_length, extension_list, low_link)
